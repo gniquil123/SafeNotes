@@ -96,5 +96,3 @@ python main.py --smoke           # 无人工介入的 GUI 冒烟（临时库，3
 
 > 注：`SAFENOTES_LOW_KDF=1` 环境变量将 KDF 降为 8MB/1 轮，仅供测试加速，
 > 正常启动始终使用 256MB 全强度参数。
-
-demo.html 为早期浏览器交互演示版，与正式版交互一致，可留作参考或删除。
