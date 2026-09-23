@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QSlider, QVBoxLayout,
 )
 
+from app.i18n import tr
 from app.ui.unlock_dialog import StrengthBar
 
 CONFUSABLE = set("0O1lI|`'\"")
@@ -54,7 +55,7 @@ class GeneratorDialog(QDialog):
         super().__init__(parent)
         self.target_edit = target_edit
         self.clip_sec = clip_sec
-        self.setWindowTitle("密码生成器")
+        self.setWindowTitle(tr("密码生成器"))
         self.setModal(True)
         self.setMinimumWidth(460)
         self._build_ui()
@@ -72,12 +73,12 @@ class GeneratorDialog(QDialog):
                                     "letter-spacing:1px;text-align:center;padding:9px;")
         row.addWidget(self.out_edit)
         b_re = QPushButton("🔄")
-        b_re.setToolTip("重新生成")
+        b_re.setToolTip(tr("重新生成"))
         b_re.setFixedWidth(42)
         b_re.clicked.connect(self._regen)
         row.addWidget(b_re)
         b_cp = QPushButton("📋")
-        b_cp.setToolTip("复制（自动清除）")
+        b_cp.setToolTip(tr("复制（自动清除）"))
         b_cp.setFixedWidth(42)
         b_cp.clicked.connect(lambda: self.copy_secret.emit(self.out_edit.text(), self.clip_sec))
         row.addWidget(b_cp)
@@ -87,7 +88,7 @@ class GeneratorDialog(QDialog):
         lay.addWidget(self.strength)
 
         len_row = QHBoxLayout()
-        len_row.addWidget(QLabel("长度"))
+        len_row.addWidget(QLabel(tr("长度")))
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(8, 64)
         self.slider.setValue(20)
@@ -100,11 +101,11 @@ class GeneratorDialog(QDialog):
         lay.addLayout(len_row)
 
         chk_row = QHBoxLayout()
-        self.cb_lower = QCheckBox("小写 a-z")
-        self.cb_upper = QCheckBox("大写 A-Z")
-        self.cb_digit = QCheckBox("数字 0-9")
-        self.cb_symbol = QCheckBox("符号 !@#")
-        self.cb_noconf = QCheckBox("排除易混淆 (0O1lI)")
+        self.cb_lower = QCheckBox(tr("小写 a-z"))
+        self.cb_upper = QCheckBox(tr("大写 A-Z"))
+        self.cb_digit = QCheckBox(tr("数字 0-9"))
+        self.cb_symbol = QCheckBox(tr("符号 !@#"))
+        self.cb_noconf = QCheckBox(tr("排除易混淆 (0O1lI)"))
         for cb, on in ((self.cb_lower, True), (self.cb_upper, True),
                        (self.cb_digit, True), (self.cb_symbol, True), (self.cb_noconf, True)):
             cb.setChecked(on)
@@ -113,16 +114,16 @@ class GeneratorDialog(QDialog):
         self.slider.valueChanged.connect(self._regen)
         lay.addLayout(chk_row)
 
-        note = QLabel("使用 secrets 加密级随机源（CSPRNG）")
+        note = QLabel(tr("使用 secrets 加密级随机源（CSPRNG）"))
         note.setStyleSheet("color:#64748b;font-size:11px;border:none;")
         lay.addWidget(note)
 
         foot = QHBoxLayout()
         foot.addStretch(1)
-        b_close = QPushButton("关闭")
+        b_close = QPushButton(tr("关闭"))
         b_close.clicked.connect(self.reject)
         foot.addWidget(b_close)
-        self.b_use = QPushButton("✔ 使用此密码（填入表单）")
+        self.b_use = QPushButton(tr("✔ 使用此密码（填入表单）"))
         self.b_use.setProperty("primary", True)
         self.b_use.clicked.connect(self._use)
         foot.addWidget(self.b_use)

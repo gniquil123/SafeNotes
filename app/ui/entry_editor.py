@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.models import Entry, ImageItem
+from app.i18n import tr, tf
 from app.ui.unlock_dialog import StrengthBar
 
 THUMB = 96
@@ -25,7 +26,7 @@ THUMB = 96
 class ImagePreviewDialog(QDialog):
     def __init__(self, image: ImageItem, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(image.name or "图片预览")
+        self.setWindowTitle(image.name or tr("图片预览"))
         pix = _pixmap_from_image(image)
         lay = QVBoxLayout(self)
         lbl = QLabel()
@@ -36,7 +37,7 @@ class ImagePreviewDialog(QDialog):
             lbl.setPixmap(pix)
             self.resize(pix.size() + self.contentsMargins() * 2)
         else:
-            lbl.setText("（无法解码该图片）")
+            lbl.setText(tr("（无法解码该图片）"))
         lay.addWidget(lbl)
 
 
@@ -69,19 +70,19 @@ class _Thumb(QFrame):
             lbl.setPixmap(pix.scaled(THUMB, THUMB, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         lbl.mousePressEvent = lambda *_: ImagePreviewDialog(image, self).exec()
         lay.addWidget(lbl, 0, Qt.AlignHCenter)
-        name = QLabel(image.name or "（未命名）")
+        name = QLabel(image.name or tr("（未命名）"))
         name.setObjectName("imgName")
         name.setAlignment(Qt.AlignCenter)
         name.setFixedWidth(THUMB)
         lay.addWidget(name, 0, Qt.AlignHCenter)
         btns = QHBoxLayout()
         btns.setSpacing(4)
-        b_view = QPushButton("查看")
+        b_view = QPushButton(tr("查看"))
         b_view.setFixedHeight(22)
         b_view.clicked.connect(lambda: ImagePreviewDialog(image, self).exec())
         btns.addWidget(b_view)
         if on_remove is not None:
-            b_rm = QPushButton("移除")
+            b_rm = QPushButton(tr("移除"))
             b_rm.setFixedHeight(22)
             b_rm.clicked.connect(on_remove)
             btns.addWidget(b_rm)
@@ -135,11 +136,11 @@ class EntryEditor(QWidget):
         icon.setAlignment(Qt.AlignCenter)
         icon.setStyleSheet("font-size:48px;border:none;color:#94a3b8;")
         v.addWidget(icon)
-        t1 = QLabel("从左侧选择一个条目，或点击顶部按钮新建")
+        t1 = QLabel(tr("从左侧选择一个条目，或点击顶部按钮新建"))
         t1.setAlignment(Qt.AlignCenter)
         t1.setStyleSheet("color:#64748b;border:none;")
         v.addWidget(t1)
-        t2 = QLabel("Ctrl+Z 撤销保存　Ctrl+Y 重做　Ctrl+S 保存")
+        t2 = QLabel(tr("Ctrl+Z 撤销保存　Ctrl+Y 重做　Ctrl+S 保存"))
         t2.setAlignment(Qt.AlignCenter)
         t2.setStyleSheet("color:#94a3b8;font-size:11.5px;border:none;")
         v.addWidget(t2)
@@ -172,7 +173,7 @@ class EntryEditor(QWidget):
         未保存前取消则不产生任何数据；保存走正常新建流程（可撤销）。
         """
         e = Entry.new(src.type)
-        e.title = (src.title or "未命名") + "（副本）"
+        e.title = (src.title or tr("未命名")) + tr("（副本）")
         e.category = src.category
         import copy as _copy
         e.fields = _copy.deepcopy(src.fields)
@@ -199,8 +200,8 @@ class EntryEditor(QWidget):
 
         # 头部
         head = QHBoxLayout()
-        tag = QLabel(("新建" if is_draft else "编辑") +
-                     (" · 🔑 密码条目" if entry.type == "password" else " · 📝 笔记"))
+        tag = QLabel((tr("新建") if is_draft else tr("编辑")) +
+                     (tr(" · 🔑 密码条目") if entry.type == "password" else tr(" · 📝 笔记")))
         tag.setStyleSheet(
             f"background:#dbeafe;color:#2563eb;border-radius:10px;"
             f"padding:2px 9px;font-size:11px;font-weight:700;")
@@ -209,8 +210,8 @@ class EntryEditor(QWidget):
         self._dirty_lbl.setStyleSheet("color:#f59e0b;font-size:11px;border:none;")
         head.addWidget(self._dirty_lbl)
         head.addStretch(1)
-        meta = QLabel("尚未保存（保存后加密入库）" if is_draft
-                      else f"更新于 {entry.updated_at.replace('T', ' ')[:16]}")
+        meta = QLabel(tr("尚未保存（保存后加密入库）") if is_draft
+                      else tf("更新于 {time}", time=entry.updated_at.replace('T', ' ')[:16]))
         meta.setStyleSheet("color:#94a3b8;font-size:10.5px;border:none;")
         head.addWidget(meta)
         v.addLayout(head)
@@ -225,26 +226,26 @@ class EntryEditor(QWidget):
             return QLabel(t)
 
         self.title_edit = QLineEdit(entry.title)
-        self.title_edit.setPlaceholderText("例如：GitHub 账号" if entry.type == "password"
-                                           else "例如：服务器巡检笔记")
-        form.addRow(label("标题 *"), self.title_edit)
+        self.title_edit.setPlaceholderText(tr("例如：GitHub 账号") if entry.type == "password"
+                                           else tr("例如：服务器巡检笔记"))
+        form.addRow(label(tr("标题 *")), self.title_edit)
 
         # 分类：可下拉选择已有分类，也可输入新分类（带补全）
         self.category_edit = QComboBox()
         self.category_edit.setEditable(True)
-        cur_cat = preset_category or entry.category or "默认"
+        cur_cat = preset_category or entry.category or tr("默认")
         cat_items = sorted({c for c in categories if c} | {cur_cat})
         self.category_edit.addItems(cat_items)
         self.category_edit.setCurrentText(cur_cat)
         cat_comp = QCompleter(cat_items)
         cat_comp.setFilterMode(Qt.MatchContains)
         self.category_edit.setCompleter(cat_comp)
-        form.addRow(label("分类"), self.category_edit)
+        form.addRow(label(tr("分类")), self.category_edit)
 
         if entry.type == "password":
             self.username_edit = QLineEdit(entry.fields.get("username", ""))
-            self.username_edit.setPlaceholderText("手机号 / 邮箱 / 用户名")
-            form.addRow(label("账号"), self.username_edit)
+            self.username_edit.setPlaceholderText(tr("手机号 / 邮箱 / 用户名"))
+            form.addRow(label(tr("账号")), self.username_edit)
 
             pw_row = QHBoxLayout()
             self.password_edit = QLineEdit(entry.fields.get("password", ""))
@@ -252,24 +253,24 @@ class EntryEditor(QWidget):
             pw_row.addWidget(self.password_edit)
             self._b_eye = QToolButton()
             self._b_eye.setText("👁")
-            self._b_eye.setToolTip("显示 / 隐藏密码")
+            self._b_eye.setToolTip(tr("显示 / 隐藏密码"))
             self._b_eye.clicked.connect(self._toggle_pw)
             pw_row.addWidget(self._b_eye)
             self._b_copy = QToolButton()
             self._b_copy.setText("📋")
             sec = self._clip_sec_getter()
-            self._b_copy.setToolTip(f"复制密码（{sec} 秒后自动清除）" if sec else "复制密码")
+            self._b_copy.setToolTip(tf("复制密码（{sec} 秒后自动清除）", sec=sec) if sec else tr("复制密码"))
             self._b_copy.clicked.connect(
                 lambda: self.copy_secret.emit(self.password_edit.text()))
             pw_row.addWidget(self._b_copy)
             self._b_gen = QToolButton()
             self._b_gen.setText("🎲")
-            self._b_gen.setToolTip("打开密码生成器")
+            self._b_gen.setToolTip(tr("打开密码生成器"))
             self._b_gen.clicked.connect(self.open_generator)
             pw_row.addWidget(self._b_gen)
             wrap = QWidget()
             wrap.setLayout(pw_row)
-            form.addRow(label("密码"), wrap)
+            form.addRow(label(tr("密码")), wrap)
 
             self.pw_strength = StrengthBar()
             self.pw_strength.update_password(entry.fields.get("password", ""))
@@ -278,21 +279,21 @@ class EntryEditor(QWidget):
 
             self.url_edit = QLineEdit(entry.fields.get("url", ""))
             self.url_edit.setPlaceholderText("https://…")
-            form.addRow(label("网址"), self.url_edit)
+            form.addRow(label(tr("网址")), self.url_edit)
 
             self.notes_edit = QPlainTextEdit(entry.fields.get("notes", ""))
-            self.notes_edit.setPlaceholderText("恢复码、绑定手机、备注…")
+            self.notes_edit.setPlaceholderText(tr("恢复码、绑定手机、备注…"))
             self.notes_edit.setFixedHeight(84)
-            form.addRow(label("备注"), self.notes_edit)
+            form.addRow(label(tr("备注")), self.notes_edit)
         else:
             self.content_edit = QPlainTextEdit(entry.fields.get("content", ""))
-            self.content_edit.setPlaceholderText("在这里记录内容…（支持粘贴 / 拖入图片）")
+            self.content_edit.setPlaceholderText(tr("在这里记录内容…（支持粘贴 / 拖入图片）"))
             self.content_edit.setMinimumHeight(240)
-            form.addRow(label("内容"), self.content_edit)
+            form.addRow(label(tr("内容")), self.content_edit)
 
         # 图片区
-        img_lbl = QLabel("图片")
-        v.addWidget(label("图片（支持粘贴 / 拖入，点击查看大图）"))
+        img_lbl = QLabel(tr("图片"))
+        v.addWidget(label(tr("图片（支持粘贴 / 拖入，点击查看大图）")))
         self.img_host = QWidget()
         self.img_grid = QGridLayout(self.img_host)
         self.img_grid.setContentsMargins(0, 0, 0, 0)
@@ -303,29 +304,29 @@ class EntryEditor(QWidget):
         # 底部按钮
         v.addSpacing(10)
         foot = QHBoxLayout()
-        b_save = QPushButton("💾 保存（Ctrl+S）")
+        b_save = QPushButton(tr("💾 保存（Ctrl+S）"))
         b_save.setProperty("primary", True)
         b_save.clicked.connect(self._on_save)
         foot.addWidget(b_save)
-        b_cancel = QPushButton("取消")
+        b_cancel = QPushButton(tr("取消"))
         b_cancel.clicked.connect(self.cancel_requested.emit)
         foot.addWidget(b_cancel)
         if not is_draft:
-            b_dup = QPushButton("⧉ 复制条目")
-            b_dup.setToolTip("以此条目为模板新建：保留分类 / 账号 / 密码 / 内容 / 图片，改个账号名即可保存")
+            b_dup = QPushButton(tr("⧉ 复制条目"))
+            b_dup.setToolTip(tr("以此条目为模板新建：保留分类 / 账号 / 密码 / 内容 / 图片，改个账号名即可保存"))
             b_dup.clicked.connect(self.duplicate_requested.emit)
             foot.addWidget(b_dup)
-            b_share = QPushButton("📤 分享")
-            b_share.setToolTip("把条目文本内容（含密码）复制到剪贴板，方便粘贴发送；到期自动清除")
+            b_share = QPushButton(tr("📤 分享"))
+            b_share.setToolTip(tr("把条目文本内容（含密码）复制到剪贴板，方便粘贴发送；到期自动清除"))
             b_share.clicked.connect(self.share_requested.emit)
             foot.addWidget(b_share)
-            b_del = QPushButton("🗑 删除")
+            b_del = QPushButton(tr("🗑 删除"))
             b_del.setProperty("danger", True)
             b_del.clicked.connect(self.delete_requested.emit)
             foot.addWidget(b_del)
         foot.addStretch(1)
         if not is_draft:
-            self._b_hist = QPushButton(f"🕘 历史版本（{len(entry.history)}）")
+            self._b_hist = QPushButton(tf("🕘 历史版本（{count}）", count=len(entry.history)))
             self._b_hist.clicked.connect(self.history_requested.emit)
             foot.addWidget(self._b_hist)
         v.addLayout(foot)
@@ -348,7 +349,7 @@ class EntryEditor(QWidget):
             self.dirty_changed.emit(dirty)
         lbl = getattr(self, "_dirty_lbl", None)
         if lbl is not None and isValid(lbl):
-            lbl.setText("● 未保存" if dirty else "")
+            lbl.setText(tr("● 未保存") if dirty else "")
 
     def is_dirty(self) -> bool:
         return self._dirty
@@ -385,9 +386,9 @@ class EntryEditor(QWidget):
             if col > 4:
                 col = 0
                 row += 1
-        add = QPushButton("＋\n添加图片")
+        add = QPushButton(tr("＋\n添加图片"))
         add.setFixedSize(THUMB + 20, THUMB + 58)
-        add.setToolTip("支持任意大小图片")
+        add.setToolTip(tr("支持任意大小图片"))
         add.clicked.connect(self._pick_images)
         self.img_grid.addWidget(add, row, col)
         self._set_dirty(True)
@@ -398,7 +399,8 @@ class EntryEditor(QWidget):
 
     def _pick_images(self):
         files, _ = QFileDialog.getOpenFileNames(
-            self, "选择图片", "", "图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp *.ico);;所有文件 (*.*)")
+            self, tr("选择图片"), "",
+            tr("图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp *.ico);;所有文件 (*.*)"))
         for f in files:
             self.add_image_file(f, mark_dirty=True)
 
@@ -421,7 +423,7 @@ class EntryEditor(QWidget):
         raw = bytes(buf.data())
         buf.close()
         self._form_images.append(
-            ImageItem(name=f"粘贴图片_{len(self._form_images) + 1}.png",
+            ImageItem(name=tf("粘贴图片_{n}.png", n=len(self._form_images) + 1),
                       data=base64.b64encode(raw).decode()))
         self._refresh_images()
 
@@ -440,14 +442,14 @@ class EntryEditor(QWidget):
         if not self.title_edit.text().strip():
             self.title_edit.setFocus()
             from PySide6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "缺少标题", "请填写标题后再保存。")
+            QMessageBox.warning(self, tr("缺少标题"), tr("请填写标题后再保存。"))
             return
         self.save_requested.emit(self.collect())
 
     def collect(self) -> Entry:
         e = self._base.deep_copy()
         e.title = self.title_edit.text().strip()
-        e.category = self.category_edit.currentText().strip() or "默认"
+        e.category = self.category_edit.currentText().strip() or tr("默认")
         if e.type == "password":
             e.fields["username"] = self.username_edit.text()
             e.fields["password"] = self.password_edit.text()

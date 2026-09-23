@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.models import Entry
+from app.i18n import tr, tf
 
 
 def _fmt(iso: str) -> str:
@@ -24,7 +25,7 @@ class HistoryDialog(QDialog):
     def __init__(self, entry: Entry, parent=None):
         super().__init__(parent)
         self.entry = entry
-        self.setWindowTitle(f"历史版本 — 「{entry.title or '未命名'}」")
+        self.setWindowTitle(tf("历史版本 — 「{title}」", title=entry.title or tr("未命名")))
         self.setModal(True)
         self.resize(640, 520)
         self._show_pw = False
@@ -36,9 +37,9 @@ class HistoryDialog(QDialog):
         lay.setSpacing(10)
 
         total = len(self.entry.history)
-        head = QLabel(f"每次保存前旧内容自动快照，当前共 {total} 版"
-                      f"（可在设置中调整保留数）。恢复前会先自动快照当前内容，"
-                      f"恢复操作本身也可再撤销。")
+        head = QLabel(tf("每次保存前旧内容自动快照，当前共 {total} 版"
+                         "（可在设置中调整保留数）。恢复前会先自动快照当前内容，"
+                         "恢复操作本身也可再撤销。", total=total))
         head.setWordWrap(True)
         head.setStyleSheet("color:#64748b;font-size:11.5px;border:none;")
         lay.addWidget(head)
@@ -46,12 +47,12 @@ class HistoryDialog(QDialog):
         self.list_w = QListWidget()
         self.list_w.setObjectName("histList")
         for i, h in enumerate(self.entry.history):
-            tag = "最新" if i == 0 else f"第 {total - i} 版"
+            tag = tr("最新") if i == 0 else tf("第 {n} 版", n=total - i)
             item = QListWidgetItem(f"🕘 {_fmt(h.saved_at)}　[{tag}]\n{h.reason}")
             item.setData(Qt.UserRole, i)
             self.list_w.addItem(item)
         if not total:
-            self.list_w.addItem(QListWidgetItem("该条目还没有历史版本\n（每次保存时自动快照旧内容）"))
+            self.list_w.addItem(QListWidgetItem(tr("该条目还没有历史版本\n（每次保存时自动快照旧内容）")))
         self.list_w.itemClicked.connect(lambda it: self._preview(it.data(Qt.UserRole)))
         lay.addWidget(self.list_w, 2)
 
@@ -63,14 +64,14 @@ class HistoryDialog(QDialog):
         lay.addWidget(self.preview_scroll, 3)
 
         foot = QHBoxLayout()
-        tip = QLabel("点击左侧版本查看内容")
+        tip = QLabel(tr("点击左侧版本查看内容"))
         tip.setStyleSheet("color:#64748b;font-size:11.5px;border:none;")
         foot.addWidget(tip)
         foot.addStretch(1)
-        b_close = QPushButton("关闭")
+        b_close = QPushButton(tr("关闭"))
         b_close.clicked.connect(self.reject)
         foot.addWidget(b_close)
-        self.b_restore = QPushButton("↩ 恢复此版本")
+        self.b_restore = QPushButton(tr("↩ 恢复此版本"))
         self.b_restore.setProperty("primary", True)
         self.b_restore.setEnabled(False)
         self.b_restore.clicked.connect(self._restore)
@@ -87,7 +88,7 @@ class HistoryDialog(QDialog):
         h = self.entry.history[index]
         snap = h.snap
         total = len(self.entry.history)
-        tag = "最新" if index == 0 else f"第 {total - index} 版"
+        tag = tr("最新") if index == 0 else tf("第 {n} 版", n=total - index)
 
         form = QFormLayout(self.preview_host)
         form.setContentsMargins(4, 4, 4, 4)
@@ -101,27 +102,28 @@ class HistoryDialog(QDialog):
             form.addRow(k, lbl)
             return lbl
 
-        add_row("版本", f"第 {total - index} 版 · {_fmt(h.saved_at)}" + ("（最新）" if index == 0 else f"　[{tag}]"))
-        add_row("标题", snap.get("title") or "（未命名）")
-        add_row("分类", snap.get("category") or "—")
+        add_row(tr("版本"), tf("第 {n} 版 · {time}", n=total - index,
+                               time=_fmt(h.saved_at)) + (tr("（最新）") if index == 0 else f"　[{tag}]"))
+        add_row(tr("标题"), snap.get("title") or tr("（未命名）"))
+        add_row(tr("分类"), snap.get("category") or "—")
         fields = snap.get("fields", {})
         if self.entry.type == "password":
-            add_row("账号", fields.get("username") or "—")
-            self._pw_lbl = add_row("密码", self._pw_text(fields))
+            add_row(tr("账号"), fields.get("username") or "—")
+            self._pw_lbl = add_row(tr("密码"), self._pw_text(fields))
             btn_row = QWidget()
             hbl = QHBoxLayout(btn_row)
             hbl.setContentsMargins(0, 0, 0, 0)
-            b_eye = QPushButton("👁 显示 / 隐藏密码")
+            b_eye = QPushButton(tr("👁 显示 / 隐藏密码"))
             b_eye.setProperty("flat", True)
             b_eye.clicked.connect(self._toggle_pw)
             hbl.addWidget(b_eye)
             hbl.addStretch(1)
             form.addRow("", btn_row)
-            add_row("网址", fields.get("url") or "—")
-            add_row("备注", fields.get("notes") or "—")
+            add_row(tr("网址"), fields.get("url") or "—")
+            add_row(tr("备注"), fields.get("notes") or "—")
         else:
-            add_row("内容", fields.get("content") or "—")
-        add_row("图片", f"{len(snap.get('images', []))} 张")
+            add_row(tr("内容"), fields.get("content") or "—")
+        add_row(tr("图片"), f"{len(snap.get('images', []))}{tr('张')}")
 
         self._current_index = index
         self.b_restore.setEnabled(True)

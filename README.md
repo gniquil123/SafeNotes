@@ -1,5 +1,8 @@
 # 加密记事本（SafeNotes）
 
+**语言切换 / Switch language / Выбор языка：**
+[中文](README.md) · [English](README.en.md) · [Русский](README.ru.md)
+
 Windows 桌面加密保险库：账号密码、文本笔记、图片统一加密存储。
 每次打开必须输入主密码，运行中实时解密展示，关闭 / 锁定后磁盘上只存在密文。
 
