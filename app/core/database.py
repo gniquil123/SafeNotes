@@ -9,6 +9,7 @@ import copy
 from datetime import datetime
 
 from .models import Entry, HistoryItem, ImageItem, now_iso
+from app.i18n import tf
 
 DEFAULT_SETTINGS = {
     "auto_lock_min": 5,      # 闲置自动锁定分钟数（0 = 不锁定）
@@ -165,5 +166,5 @@ class Database:
         ne.category = snap.get("category", "") or "默认"
         ne.fields = copy.deepcopy(snap.get("fields", ne.fields))
         ne.images = [ImageItem.from_dict(im) for im in snap.get("images", [])]
-        ne.history = self.push_history(cur, f"恢复第 {ver_no} 版前的自动快照")
+        ne.history = self.push_history(cur, tf("恢复第 {ver} 版前的自动快照", ver=ver_no))
         return ne

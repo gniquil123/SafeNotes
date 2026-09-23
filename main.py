@@ -69,6 +69,10 @@ def run() -> int:
     settings = QSettings()
     last_path = settings.value("last_vault_path", "")
 
+    # 应用上次保存的界面语言（默认中文），启动器/解锁/主窗口全部一致生效
+    from app.i18n import set_language as i18n_set_language
+    i18n_set_language(settings.value("i18n_lang", "zh"))
+
     from app.ui.style import build_qss
     from app.ui.unlock_dialog import UnlockDialog
     from app.ui.main_window import MainWindow

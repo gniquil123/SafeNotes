@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.crypto import vault as vault_mod
+from app.i18n import tr, tf
 from app.utils.strength import evaluate
 
 
@@ -37,7 +38,7 @@ class StrengthBar(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(4)
         lay.addLayout(row)
-        self.label = QLabel("强度：—")
+        self.label = QLabel(tr("强度：—"))
         self.label.setStyleSheet(f"color:#64748b;font-size:11px;border:none;")
         lay.addWidget(self.label)
 
@@ -48,9 +49,9 @@ class StrengthBar(QWidget):
             on = i < r["score"]
             seg.setStyleSheet(
                 f"background:{colors[r['score']] if on else '#e2e8f0'};border-radius:2px;")
-        note = f"（{r['note']}）" if r["note"] else ""
-        self.label.setText(
-            f"强度：{r['label']}{note}" + (f"　≈ {r['bits']} bit 熵" if pw else ""))
+        note = f"（{tr(r.get('note'))}）" if r["note"] else ""
+        suffix = tf("　≈ {bits} bit 熵", bits=r["bits"]) if pw else ""
+        self.label.setText(f"{tr('强度：')}{r['label']}{note}{suffix}")
 
 
 class KdfWorker(QThread):
@@ -77,11 +78,11 @@ class KdfWorker(QThread):
                 v, db = vault_mod.open_vault(self.path, self.password)
                 self.ok.emit(v, db)
         except vault_mod.WrongPasswordError:
-            self.failed.emit("wrong", "主密码错误")
+            self.failed.emit("wrong", tr("主密码错误"))
         except vault_mod.VaultFormatError as e:
             self.failed.emit("format", str(e))
         except Exception as e:                       # noqa: BLE001
-            self.failed.emit("error", f"操作失败：{e}")
+            self.failed.emit("error", tf("操作失败：{e}", e=e))
 
 
 class UnlockDialog(QDialog):
@@ -97,7 +98,7 @@ class UnlockDialog(QDialog):
         self.lock_until = 0
         self._worker: KdfWorker | None = None
 
-        self.setWindowTitle("加密记事本" if mode == "create" else "保险库已锁定")
+        self.setWindowTitle(tr("加密记事本") if mode == "create" else tr("保险库已锁定"))
         self.setModal(True)
         self.setFixedWidth(430)
         self._build_ui()
@@ -117,13 +118,13 @@ class UnlockDialog(QDialog):
         icon.setStyleSheet("font-size:34px;border:none;background:transparent;")
         lay.addWidget(icon)
 
-        title = QLabel("创建你的加密保险库" if self.mode == "create" else "保险库已锁定")
+        title = QLabel(tr("创建你的加密保险库") if self.mode == "create" else tr("保险库已锁定"))
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size:18px;font-weight:700;border:none;")
         lay.addWidget(title)
 
-        sub = QLabel("设置一个主密码，它将是打开保险库的唯一钥匙" if self.mode == "create"
-                     else "输入主密码解锁 · 密钥已从内存中清除")
+        sub = QLabel(tr("设置一个主密码，它将是打开保险库的唯一钥匙") if self.mode == "create"
+                     else tr("输入主密码解锁 · 密钥已从内存中清除"))
         sub.setAlignment(Qt.AlignCenter)
         sub.setWordWrap(True)
         sub.setStyleSheet("color:#64748b;font-size:12px;border:none;")
@@ -148,23 +149,23 @@ class UnlockDialog(QDialog):
         self.err_lbl.hide()
 
         if self.mode == "create":
-            lay.addWidget(mk_label("主密码"))
+            lay.addWidget(mk_label(tr("主密码")))
             self.pw_edit = QLineEdit()
             self.pw_edit.setEchoMode(QLineEdit.Password)
-            self.pw_edit.setPlaceholderText("请输入主密码")
+            self.pw_edit.setPlaceholderText(tr("请输入主密码"))
             lay.addWidget(self.pw_edit)
             self.strength = StrengthBar()
             lay.addWidget(self.strength)
             self.pw_edit.textChanged.connect(self.strength.update_password)
 
-            lay.addWidget(mk_label("确认主密码"))
+            lay.addWidget(mk_label(tr("确认主密码")))
             self.pw2_edit = QLineEdit()
             self.pw2_edit.setEchoMode(QLineEdit.Password)
-            self.pw2_edit.setPlaceholderText("请再次输入主密码")
+            self.pw2_edit.setPlaceholderText(tr("请再次输入主密码"))
             lay.addWidget(self.pw2_edit)
 
-            warn = QLabel("⚠️  主密码遗失将无法找回 —— 没有后门、没有重置途径，"
-                          "任何人都无法（包括开发者）解密你的数据。请务必牢记。")
+            warn = QLabel(tr("⚠️  主密码遗失将无法找回 —— 没有后门、没有重置途径，"
+                             "任何人都无法（包括开发者）解密你的数据。请务必牢记。"))
             warn.setWordWrap(True)
             warn.setStyleSheet(
                 "color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;"
@@ -172,10 +173,10 @@ class UnlockDialog(QDialog):
             lay.addWidget(warn)
             self.pw2_edit.returnPressed.connect(self._on_confirm)
         else:
-            lay.addWidget(mk_label("主密码"))
+            lay.addWidget(mk_label(tr("主密码")))
             self.pw_edit = QLineEdit()
             self.pw_edit.setEchoMode(QLineEdit.Password)
-            self.pw_edit.setPlaceholderText("输入主密码解锁")
+            self.pw_edit.setPlaceholderText(tr("输入主密码解锁"))
             lay.addWidget(self.pw_edit)
             self.pw_edit.returnPressed.connect(self._on_confirm)
             self.pw2_edit = None
@@ -191,13 +192,13 @@ class UnlockDialog(QDialog):
         lay.addWidget(self.err_lbl)
         lay.addSpacing(6)
 
-        self.btn = QPushButton("创建保险库" if self.mode == "create" else "解锁")
+        self.btn = QPushButton(tr("创建保险库") if self.mode == "create" else tr("解锁"))
         self.btn.setProperty("primary", True)
         self.btn.setMinimumHeight(36)
         self.btn.clicked.connect(self._on_confirm)
         lay.addWidget(self.btn)
 
-        foot = QLabel("🔒 数据加密存储于本机，关闭程序后需输入主密码解锁")
+        foot = QLabel(tr("🔒 数据加密存储于本机，关闭程序后需输入主密码解锁"))
         foot.setAlignment(Qt.AlignCenter)
         foot.setWordWrap(True)
         foot.setStyleSheet("color:#94a3b8;font-size:10.5px;border:none;")
@@ -218,8 +219,9 @@ class UnlockDialog(QDialog):
         if remain > 0:
             self.btn.setEnabled(False)
             s = (remain + 999) // 1000
-            self.count_lbl.setText(f"连续错误 {self.fail_count} 次，"
-                                   f"请等待 {s // 60} 分 {s % 60} 秒后重试")
+            self.count_lbl.setText(
+                tf("连续错误 {count} 次，请等待 {m} 分 {s} 秒后重试",
+                   count=self.fail_count, m=s // 60, s=s % 60))
             self.count_lbl.show()
         elif not (self._worker and self._worker.isRunning()):
             self.btn.setEnabled(True)
@@ -237,7 +239,7 @@ class UnlockDialog(QDialog):
             return
         pw = self.pw_edit.text()
         if not pw:
-            self._show_error("请输入主密码")
+            self._show_error(tr("请输入主密码"))
             return
 
         if self.mode == "create":
@@ -245,18 +247,18 @@ class UnlockDialog(QDialog):
             if ev(pw)["score"] < 2:
                 from PySide6.QtWidgets import QMessageBox
                 r = QMessageBox.warning(
-                    self, "密码强度偏弱",
-                    "主密码强度较弱，抗暴力破解能力不足。\n\n"
-                    "建议使用 12 位以上、混合大小写数字符号的密码。\n仍要使用该密码吗？",
+                    self, tr("密码强度偏弱"),
+                    tr("主密码强度较弱，抗暴力破解能力不足。\n\n"
+                       "建议使用 12 位以上、混合大小写数字符号的密码。\n仍要使用该密码吗？"),
                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
                 if r != QMessageBox.Yes:
                     return
             if pw != self.pw2_edit.text():
-                self._show_error("两次输入的密码不一致")
+                self._show_error(tr("两次输入的密码不一致"))
                 return
 
         self.btn.setEnabled(False)
-        self.btn.setText("派生密钥中…（约 1 秒）")
+        self.btn.setText(tr("派生密钥中…（约 1 秒）"))
         self.err_lbl.hide()
 
         self._worker = KdfWorker(self.mode, self.vault_path, pw, None)
@@ -270,14 +272,14 @@ class UnlockDialog(QDialog):
 
     def _on_fail(self, kind: str, msg: str):
         self.btn.setEnabled(True)
-        self.btn.setText("解锁" if self.mode == "unlock" else "创建保险库")
+        self.btn.setText(tr("解锁") if self.mode == "unlock" else tr("创建保险库"))
         if kind == "wrong":
             self.fail_count += 1
             pen = self._penalty_ms()
             if pen:
                 self.lock_until = _now_ms() + pen
-            extra = f"（已连续错误 {self.fail_count} 次）" if self.fail_count > 1 else ""
-            self._show_error("主密码错误" + extra + ("，触发等待惩罚" if pen else ""))
+            extra = tf("（已连续错误 {count} 次）", count=self.fail_count) if self.fail_count > 1 else ""
+            self._show_error(tr("主密码错误") + extra + (tr("，触发等待惩罚") if pen else ""))
             self.pw_edit.clear()
             self.pw_edit.setFocus()
         else:

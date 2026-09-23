@@ -4,13 +4,14 @@ from __future__ import annotations
 from .database import Database
 from .models import Entry
 from .undostack import Command
+from app.i18n import tf
 
 
 class CreateEntryCommand(Command):
     """新建条目。undo 移除，redo 重新插回。"""
 
     def __init__(self, db: Database, entry: Entry):
-        super().__init__(f"新建「{entry.title or '未命名'}」")
+        super().__init__(tf("新建「{title}」", title=entry.title or "未命名"))
         self._db = db
         self._entry = entry
 
@@ -25,7 +26,7 @@ class SaveEntryCommand(Command):
     """保存条目（含恢复历史版本，label 由调用方定制）。"""
 
     def __init__(self, db: Database, old_entry: Entry, new_entry: Entry, label: str | None = None):
-        super().__init__(label or f"保存「{new_entry.title or '未命名'}」")
+        super().__init__(label or tf("保存「{title}」", title=new_entry.title or "未命名"))
         self._db = db
         self._old = old_entry        # 保存前完整深拷贝（含当时的 history）
         self._new = new_entry
@@ -39,7 +40,7 @@ class SaveEntryCommand(Command):
 
 class SoftDeleteCommand(Command):
     def __init__(self, db: Database, entry_id: str, title: str):
-        super().__init__(f"删除「{title or '未命名'}」")
+        super().__init__(tf("删除「{title}」", title=title or "未命名"))
         self._db = db
         self._id = entry_id
 
@@ -52,7 +53,7 @@ class SoftDeleteCommand(Command):
 
 class UndeleteCommand(Command):
     def __init__(self, db: Database, entry_id: str, title: str):
-        super().__init__(f"恢复「{title or '未命名'}」")
+        super().__init__(tf("恢复「{title}」", title=title or "未命名"))
         self._db = db
         self._id = entry_id
 

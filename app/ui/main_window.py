@@ -5,7 +5,7 @@ import shutil
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
@@ -22,6 +22,8 @@ from app.core.database import Database
 from app.core.models import Entry, now_iso
 from app.core.undostack import UndoManager
 from app.crypto.vault import SessionVault, change_password, rotate_backups
+from app.i18n import tr, tf
+from app.i18n import set_language as i18n_set_language
 from app.ui.entry_editor import EntryEditor
 from app.ui.history_dialog import HistoryDialog
 from app.ui.settings_dialog import SettingsDialog
@@ -54,21 +56,21 @@ class _GlobalFilter(QObject):
 
 def entry_share_text(e: Entry) -> str:
     """把条目整理成便于粘贴发送给别人的纯文本。"""
-    lines = [f"【{e.title or '未命名'}】"]
+    lines = [tf("【{title}】", title=e.title or tr("未命名"))]
     if e.type == "password":
         if e.fields.get("username"):
-            lines.append(f"账号：{e.fields['username']}")
+            lines.append(tf("账号：{v}", v=e.fields['username']))
         if e.fields.get("password"):
-            lines.append(f"密码：{e.fields['password']}")
+            lines.append(tf("密码：{v}", v=e.fields['password']))
         if e.fields.get("url"):
-            lines.append(f"网址：{e.fields['url']}")
+            lines.append(tf("网址：{v}", v=e.fields['url']))
         if e.fields.get("notes"):
-            lines.append(f"备注：{e.fields['notes']}")
+            lines.append(tf("备注：{v}", v=e.fields['notes']))
     else:
         if e.fields.get("content"):
             lines.append(e.fields["content"])
     if e.images:
-        lines.append(f"（另有 {len(e.images)} 张图片，请从应用内查看）")
+        lines.append(tf("（另有 {count} 张图片，请从应用内查看）", count=len(e.images)))
     return "\n".join(lines)
 
 
@@ -86,9 +88,10 @@ class MainWindow(QMainWindow):
         self._session_saved = False
         self._last_activity = time.time()
 
-        self.setWindowTitle("加密记事本")
+        self.setWindowTitle(tr("加密记事本"))
         self.resize(1180, 720)
         self._build_ui()
+        self._apply_static_text()
 
         self._activity_filter = _GlobalFilter(self._touch, self._handle_paste)
         QApplication.instance().installEventFilter(self._activity_filter)
@@ -117,45 +120,40 @@ class MainWindow(QMainWindow):
         icon = QLabel("🔐")
         icon.setObjectName("brandIcon")
         tl.addWidget(icon)
-        brand = QLabel("加密记事本")
-        brand.setObjectName("brand")
-        tl.addWidget(brand)
+        self.brand = QLabel()
+        self.brand.setObjectName("brand")
+        tl.addWidget(self.brand)
         tl.addSpacing(6)
 
         self.btn_undo = QToolButton()
         self.btn_undo.setText("↩")
-        self.btn_undo.setToolTip("撤销 (Ctrl+Z)")
         self.btn_undo.clicked.connect(self.do_undo)
         self.btn_redo = QToolButton()
         self.btn_redo.setText("↪")
-        self.btn_redo.setToolTip("重做 (Ctrl+Y)")
         self.btn_redo.clicked.connect(self.do_redo)
         tl.addWidget(self.btn_undo)
         tl.addWidget(self.btn_redo)
         tl.addStretch(1)
 
-        b_new_pw = QPushButton("＋ 密码条目")
-        b_new_pw.clicked.connect(lambda: self.start_draft("password"))
-        tl.addWidget(b_new_pw)
-        b_new_note = QPushButton("＋ 笔记")
-        b_new_note.clicked.connect(lambda: self.start_draft("note"))
-        tl.addWidget(b_new_note)
+        self.b_new_pw = QPushButton()
+        self.b_new_pw.clicked.connect(lambda: self.start_draft("password"))
+        tl.addWidget(self.b_new_pw)
+        self.b_new_note = QPushButton()
+        self.b_new_note.clicked.connect(lambda: self.start_draft("note"))
+        tl.addWidget(self.b_new_note)
 
-        b_lock = QToolButton()
-        b_lock.setText("🔒")
-        b_lock.setToolTip("立即锁定（清除内存中的密钥与明文）")
-        b_lock.clicked.connect(lambda: self.lock("已手动锁定"))
-        tl.addWidget(b_lock)
+        self.b_lock = QToolButton()
+        self.b_lock.setText("🔒")
+        self.b_lock.clicked.connect(lambda: self.lock(tr("已手动锁定")))
+        tl.addWidget(self.b_lock)
         self.btn_theme = QToolButton()
         self.btn_theme.setText("🌗")
-        self.btn_theme.setToolTip("切换浅色 / 深色主题")
         self.btn_theme.clicked.connect(self.toggle_theme)
         tl.addWidget(self.btn_theme)
-        b_set = QToolButton()
-        b_set.setText("⚙️")
-        b_set.setToolTip("设置")
-        b_set.clicked.connect(self.open_settings)
-        tl.addWidget(b_set)
+        self.b_set = QToolButton()
+        self.b_set.setText("⚙️")
+        self.b_set.clicked.connect(self.open_settings)
+        tl.addWidget(self.b_set)
         root.addWidget(top)
 
         # ---- 三栏 ----
@@ -171,17 +169,16 @@ class MainWindow(QMainWindow):
         sv.setContentsMargins(10, 10, 10, 10)
         sv.setSpacing(8)
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("🔍 搜索标题 / 账号 / 内容…")
         self.search_edit.textChanged.connect(self._on_search)
         sv.addWidget(self.search_edit)
         self.cat_list = QListWidget()
         self.cat_list.setObjectName("catList")
         self.cat_list.itemClicked.connect(self._on_cat_clicked)
         sv.addWidget(self.cat_list, 1)
-        b_addcat = QPushButton("📁 ＋ 新建分类")
-        b_addcat.setProperty("flat", True)
-        b_addcat.clicked.connect(self._add_category)
-        sv.addWidget(b_addcat)
+        self.b_addcat = QPushButton()
+        self.b_addcat.setProperty("flat", True)
+        self.b_addcat.clicked.connect(self._add_category)
+        sv.addWidget(self.b_addcat)
         split.addWidget(side)
 
         # 条目列表
@@ -194,11 +191,11 @@ class MainWindow(QMainWindow):
         head_row = QWidget()
         hr = QHBoxLayout(head_row)
         hr.setContentsMargins(16, 12, 16, 12)
-        self.list_head = QLabel("全部条目")
+        self.list_head = QLabel()
         self.list_head.setObjectName("listHead")
         hr.addWidget(self.list_head)
         hr.addStretch(1)
-        self.btn_empty_trash = QPushButton("🧹 清空回收站")
+        self.btn_empty_trash = QPushButton()
         self.btn_empty_trash.setProperty("danger", True)
         self.btn_empty_trash.setFixedHeight(26)
         self.btn_empty_trash.clicked.connect(self.on_empty_trash)
@@ -228,7 +225,7 @@ class MainWindow(QMainWindow):
         root.addWidget(split, 1)
 
         self.statusBar().showMessage(
-            f"🔒 {self.vault.path} ｜ Argon2id + AES-256-GCM 加密存储 ｜ 防截屏已启用"
+            f"🔒 {self.vault.path} ｜ Argon2id + AES-256-GCM 加密存储 ｜ {tr('防截屏已启用')}"
             if enable_anti_capture(self) else f"🔒 {self.vault.path} ｜ Argon2id + AES-256-GCM 加密存储")
 
         # 快捷键
@@ -251,14 +248,36 @@ class MainWindow(QMainWindow):
         self.render_list()
         self.render_detail()
 
+    def _apply_static_text(self):
+        """集中设置顶栏 / 侧栏 / 列表头的静态文本（语言切换时重刷）。"""
+        self.brand.setText(tr("加密记事本"))
+        self.btn_undo.setToolTip(tr("撤销 (Ctrl+Z)"))
+        self.btn_redo.setToolTip(tr("重做 (Ctrl+Y)"))
+        self.b_new_pw.setText(tr("＋ 密码条目"))
+        self.b_new_note.setText(tr("＋ 笔记"))
+        self.b_lock.setToolTip(tr("立即锁定（清除内存中的密钥与明文）"))
+        self.btn_theme.setToolTip(tr("切换浅色 / 深色主题"))
+        self.b_set.setToolTip(tr("设置"))
+        self.search_edit.setPlaceholderText(tr("🔍 搜索标题 / 账号 / 内容…"))
+        self.b_addcat.setText(tr("📁 ＋ 新建分类"))
+        self.list_head.setText(tr("全部条目"))
+        self.btn_empty_trash.setText(tr("🧹 清空回收站"))
+
+    def retranslate(self):
+        self._apply_static_text()
+        self.render_all()
+        app = QApplication.instance()
+        if app:
+            app.setStyleSheet(build_qss(self.db.settings.get("theme", "light")))
+
     def render_sidebar(self):
         total, per, trash = self.db.counts()
         self.cat_list.blockSignals(True)
         self.cat_list.clear()
-        self.cat_list.addItem(self._cat_item("all", "📋", "全部条目", total))
+        self.cat_list.addItem(self._cat_item("all", "📋", tr("全部条目"), total))
         for c in self.db.categories():
             self.cat_list.addItem(self._cat_item(c, "📁", c, per.get(c, 0)))
-        self.cat_list.addItem(self._cat_item("trash", "🗑️", "回收站", trash))
+        self.cat_list.addItem(self._cat_item("trash", "🗑️", tr("回收站"), trash))
         cur = self.view["cat"]
         for i in range(self.cat_list.count()):
             if self.cat_list.item(i).data(Qt.UserRole) == cur:
@@ -275,7 +294,7 @@ class MainWindow(QMainWindow):
     def render_list(self):
         cat = self.view["cat"]
         entries = self.db.visible(cat, self.view["search"])
-        name = {"all": "全部条目", "trash": "回收站"}.get(cat, cat)
+        name = {"all": tr("全部条目"), "trash": tr("回收站")}.get(cat, cat)
         self.list_head.setText(f"{name}（{len(entries)}）")
         self.btn_empty_trash.setVisible(cat == "trash" and bool(entries))
         self.entry_list.blockSignals(True)
@@ -284,13 +303,13 @@ class MainWindow(QMainWindow):
         for e in entries:
             icon = "🗑️" if e.deleted else ("🔑" if e.type == "password" else "📝")
             if e.deleted:
-                sub = f"删除于 {(e.deleted_at or '').replace('T', ' ')[:16]}"
+                sub = tf("删除于 {time}", time=(e.deleted_at or '').replace('T', ' ')[:16])
             elif e.type == "password":
-                sub = e.fields.get("username") or e.fields.get("url") or "（无账号）"
+                sub = e.fields.get("username") or e.fields.get("url") or tr("（无账号）")
             else:
                 c = (e.fields.get("content") or "").replace("\n", " ").strip()
-                sub = c[:40] or "（空笔记）"
-            it = QListWidgetItem(f"{icon}  {e.title or '（未命名）'}\n     {sub}")
+                sub = c[:40] or tr("（空笔记）")
+            it = QListWidgetItem(f"{icon}  {e.title or tr('（未命名）')}\n     {sub}")
             it.setData(Qt.UserRole, e.id)
             self.entry_list.addItem(it)
             if sel and sel.get("id") == e.id:
@@ -326,26 +345,26 @@ class MainWindow(QMainWindow):
         outer.addStretch(1)
         form = QFormLayout(card)
         form.setContentsMargins(20, 16, 20, 16)
-        form.addRow("状态", QLabel(f"🗑️ 回收站 · {'密码条目' if e.type == 'password' else '笔记'}"))
-        form.addRow("标题", QLabel(e.title or "（未命名）"))
-        form.addRow("分类", QLabel(e.category))
-        form.addRow("删除时间", QLabel((e.deleted_at or "").replace("T", " ")[:16]))
+        form.addRow(tr("状态"), QLabel(f"🗑️ {tr('回收站')} · {tr('密码条目') if e.type == 'password' else tr('笔记')}"))
+        form.addRow(tr("标题"), QLabel(e.title or tr("（未命名）")))
+        form.addRow(tr("分类"), QLabel(e.category))
+        form.addRow(tr("删除时间"), QLabel((e.deleted_at or "").replace("T", " ")[:16]))
         if e.type == "password":
-            form.addRow("账号", QLabel(e.fields.get("username") or "—"))
-            form.addRow("网址", QLabel(e.fields.get("url") or "—"))
+            form.addRow(tr("账号"), QLabel(e.fields.get("username") or "—"))
+            form.addRow(tr("网址"), QLabel(e.fields.get("url") or "—"))
         else:
             lbl = QLabel((e.fields.get("content") or "—")[:400])
             lbl.setWordWrap(True)
-            form.addRow("内容", lbl)
-        form.addRow("历史版本", QLabel(f"{len(e.history)} 份（恢复条目后可用）"))
+            form.addRow(tr("内容"), lbl)
+        form.addRow(tr("历史版本"), QLabel(tf("{n} 份（恢复条目后可用）", n=len(e.history))))
         row = QWidget()
         h = QHBoxLayout(row)
         h.setContentsMargins(0, 8, 0, 0)
-        b_restore = QPushButton("↩ 恢复此条目")
+        b_restore = QPushButton(tr("↩ 恢复此条目"))
         b_restore.setProperty("primary", True)
         b_restore.clicked.connect(lambda: self.on_restore_entry(e.id))
         h.addWidget(b_restore)
-        b_purge = QPushButton("✕ 彻底删除")
+        b_purge = QPushButton(tr("✕ 彻底删除"))
         b_purge.setProperty("danger", True)
         b_purge.clicked.connect(lambda: self.on_purge_entry(e.id))
         h.addWidget(b_purge)
@@ -357,9 +376,9 @@ class MainWindow(QMainWindow):
     def _guard_dirty(self) -> bool:
         if self.editor.is_dirty():
             r = QMessageBox.question(
-                self, "未保存的修改",
-                "当前条目有未保存的修改，确定放弃吗？\n"
-                "（未保存的内容将丢失，已保存的历史版本不受影响）",
+                self, tr("未保存的修改"),
+                tr("当前条目有未保存的修改，确定放弃吗？\n"
+                   "（未保存的内容将丢失，已保存的历史版本不受影响）"),
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             return r == QMessageBox.Yes
         return True
@@ -390,7 +409,7 @@ class MainWindow(QMainWindow):
 
     def _add_category(self):
         from PySide6.QtWidgets import QInputDialog
-        name, ok = QInputDialog.getText(self, "新建分类", "分类名称：")
+        name, ok = QInputDialog.getText(self, tr("新建分类"), tr("分类名称："))
         if ok and name.strip():
             self.start_draft("password", category=name.strip())
 
@@ -413,17 +432,17 @@ class MainWindow(QMainWindow):
             self.db.insert(ne)
             self.undo_mgr.push(CreateEntryCommand(self.db, ne))
             self.view["sel"] = {"id": ne.id}
-            toast(self, "已加密保存新条目 ✔")
+            toast(self, tr("已加密保存新条目 ✔"))
         else:
             cur = self.db.get(sel["id"])
             if cur is None:
                 return
             old = cur.deep_copy()
-            ne.history = self.db.push_history(cur, "编辑保存")
+            ne.history = self.db.push_history(cur, tr("编辑保存"))
             ne.updated_at = now_iso()
             self.db.replace(ne)
             self.undo_mgr.push(SaveEntryCommand(self.db, old, ne))
-            toast(self, "已加密保存（旧版本已存入历史）✔")
+            toast(self, tr("已加密保存（旧版本已存入历史）✔"))
         self._after_change()
 
     def on_cancel_edit(self):
@@ -437,9 +456,9 @@ class MainWindow(QMainWindow):
         if not e:
             return
         r = QMessageBox.question(
-            self, "移入回收站",
-            f"将「{e.title or '未命名'}」移入回收站？\n"
-            "（可从回收站恢复，Ctrl+Z 也可直接撤销）",
+            self, tr("移入回收站"),
+            tf("将「{title}」移入回收站？\n（可从回收站恢复，Ctrl+Z 也可直接撤销）",
+               title=e.title or tr("未命名")),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
         if r != QMessageBox.Yes:
             return
@@ -454,7 +473,7 @@ class MainWindow(QMainWindow):
             return
         self.db.undelete(eid)
         self.undo_mgr.push(UndeleteCommand(self.db, eid, e.title))
-        toast(self, "已恢复到原分类 ✔")
+        toast(self, tr("已恢复到原分类 ✔"))
         self._after_change()
 
     def on_purge_entry(self, eid: str):
@@ -462,14 +481,14 @@ class MainWindow(QMainWindow):
         if not e:
             return
         r = QMessageBox.warning(
-            self, "彻底删除",
-            f"彻底删除「{e.title or '未命名'}」？\n"
-            f"该条目及其 {len(e.history)} 份历史版本将被永久移除。\n"
-            "（本次会话内仍可用 Ctrl+Z 撤销此操作）",
+            self, tr("彻底删除"),
+            tf("彻底删除「{title}」？\n该条目及其 {count} 份历史版本将被永久移除。\n"
+               "（本次会话内仍可用 Ctrl+Z 撤销此操作）",
+               title=e.title or tr("未命名"), count=len(e.history)),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if r != QMessageBox.Yes:
             return
-        self.undo_mgr.push(PurgeCommand(self.db, [eid], "彻底删除条目"))
+        self.undo_mgr.push(PurgeCommand(self.db, [eid], tr("彻底删除条目")))
         self._after_change()
 
     def on_empty_trash(self):
@@ -477,13 +496,14 @@ class MainWindow(QMainWindow):
         if not ids:
             return
         r = QMessageBox.warning(
-            self, "清空回收站",
-            f"清空回收站？共 {len(ids)} 个条目将被永久移除（含其全部历史版本）。\n"
-            "（本次会话内仍可用 Ctrl+Z 撤销此操作）",
+            self, tr("清空回收站"),
+            tf("清空回收站？共 {count} 个条目将被永久移除（含其全部历史版本）。\n"
+               "（本次会话内仍可用 Ctrl+Z 撤销此操作）",
+               count=len(ids)),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if r != QMessageBox.Yes:
             return
-        self.undo_mgr.push(PurgeCommand(self.db, ids, f"清空回收站（{len(ids)} 项）"))
+        self.undo_mgr.push(PurgeCommand(self.db, ids, tf("清空回收站（{count} 项）", count=len(ids))))
         self._after_change()
 
     def on_duplicate_entry(self):
@@ -504,7 +524,7 @@ class MainWindow(QMainWindow):
         sel = self.view.get("sel")
         e = self.db.get(sel["id"]) if sel and sel.get("id") else None
         if e is None:
-            toast(self, "没有可分享的条目")
+            toast(self, tr("没有可分享的条目"))
             return
         self.on_copy_secret(entry_share_text(e))
 
@@ -529,20 +549,21 @@ class MainWindow(QMainWindow):
         ver_no = total - hist_index
         self.db.replace(ne)
         self.undo_mgr.push(SaveEntryCommand(self.db, old, ne,
-                                            label=f"恢复第 {ver_no} 版「{ne.title or '未命名'}」"))
-        toast(self, f"已恢复第 {ver_no} 版 ✔（恢复前已自动快照）")
+                                            label=tf("恢复第 {ver} 版「{title}」",
+                                                     ver=ver_no, title=ne.title or tr("未命名"))))
+        toast(self, tf("已恢复第 {ver} 版 ✔（恢复前已自动快照）", ver=ver_no))
         self._after_change()
 
     def on_copy_secret(self, text: str):
         if not text:
-            toast(self, "没有可复制的内容")
+            toast(self, tr("没有可复制的内容"))
             return
         sec = self.db.settings.get("clip_sec", 20)
         self.clip.copy_secret(
             text, sec,
-            on_cleared=lambda: toast(self, "剪贴板已自动清除"),
-            on_skip=lambda: toast(self, "剪贴板内容已变化，跳过清除"))
-        toast(self, f"已复制，{sec} 秒后自动清除" if sec else "已复制（未启用自动清除）")
+            on_cleared=lambda: toast(self, tr("剪贴板已自动清除")),
+            on_skip=lambda: toast(self, tr("剪贴板内容已变化，跳过清除")))
+        toast(self, tf("已复制，{sec} 秒后自动清除", sec=sec) if sec else tr("已复制（未启用自动清除）"))
 
     # ================= 撤销 / 重做 =================
     def do_undo(self):
@@ -553,7 +574,7 @@ class MainWindow(QMainWindow):
         label = self.undo_mgr.undo()
         self._after_change()
         if label:
-            toast(self, f"已撤销：{label}")
+            toast(self, tf("已撤销：{label}", label=label))
 
     def do_redo(self):
         if not self.undo_mgr.can_redo:
@@ -563,15 +584,15 @@ class MainWindow(QMainWindow):
         label = self.undo_mgr.redo()
         self._after_change()
         if label:
-            toast(self, f"已重做：{label}")
+            toast(self, tf("已重做：{label}", label=label))
 
     def _refresh_undo_buttons(self):
         self.btn_undo.setEnabled(self.undo_mgr.can_undo)
         self.btn_redo.setEnabled(self.undo_mgr.can_redo)
         if self.undo_mgr.undo_label:
-            self.btn_undo.setToolTip(f"撤销 (Ctrl+Z)：{self.undo_mgr.undo_label}")
+            self.btn_undo.setToolTip(tf("撤销 (Ctrl+Z)：{label}", label=self.undo_mgr.undo_label))
         if self.undo_mgr.redo_label:
-            self.btn_redo.setToolTip(f"重做 (Ctrl+Y)：{self.undo_mgr.redo_label}")
+            self.btn_redo.setToolTip(tf("重做 (Ctrl+Y)：{label}", label=self.undo_mgr.redo_label))
 
     def _shortcut_save(self):
         if self.view.get("sel") and not self.editor.is_empty():
@@ -609,42 +630,48 @@ class MainWindow(QMainWindow):
         dlg.apply_requested.connect(self._apply_settings)
         dlg.change_password_requested.connect(self._change_password)
         dlg.export_backup_requested.connect(self._export_backup)
+        dlg.language_changed.connect(self.retranslate)
         dlg.exec()
 
     def _apply_settings(self, s: dict):
         self.db.settings.update(s)
         self.apply_theme(s.get("theme", "light"))
+        if "language" in s and s["language"]:
+            i18n_set_language(s["language"])
+            QSettings().setValue("i18n_lang", s["language"])
+            self.retranslate()
         self.persist()
-        toast(self, "设置已保存（随保险库加密存储）✔")
+        toast(self, tr("设置已保存（随保险库加密存储）✔"))
 
     def _change_password(self, old_pw: str, new_pw: str):
         try:
             self.persist()          # 先落当前数据
             new_vault = change_password(self.vault.path, old_pw, new_pw, None)
         except Exception as e:       # noqa: BLE001
-            QMessageBox.critical(self, "修改失败", str(e))
+            QMessageBox.critical(self, tr("修改失败"), str(e))
             return
         self.vault.wipe()
         self.vault = new_vault
         self._session_saved = True
-        toast(self, "主密码已修改，全部数据已用新密码重新加密 ✔（已自动备份）")
+        toast(self, tr("主密码已修改，全部数据已用新密码重新加密 ✔（已自动备份）"))
 
     def _export_backup(self):
-        default = time.strftime("加密记事本备份_%Y%m%d_%H%M%S.vault")
-        target, _ = QFileDialog.getSaveFileName(self, "导出加密备份", default,
-                                                "加密保险库 (*.vault)")
+        default = time.strftime(tr("加密记事本") + "备份_%Y%m%d_%H%M%S.vault")
+        target, _ = QFileDialog.getSaveFileName(self, tr("导出加密备份"), default,
+                                                tr("加密保险库 (*.vault)"))
         if not target:
             return
         self.persist()
         try:
             shutil.copy2(self.vault.path, target)
         except OSError as e:
-            QMessageBox.critical(self, "导出失败", str(e))
+            QMessageBox.critical(self, tr("导出失败"), str(e))
             return
         QMessageBox.information(
-            self, "导出成功",
-            f"已导出加密备份：\n{target}\n\n"
-            "备份与原文件同样加密，可用主密码在任何一台机器打开。")
+            self, tr("导出成功"),
+            tf("已导出加密备份：\n{path}\n\n"
+               "备份与原文件同样加密，可用主密码在任何一台机器打开。",
+               path=target))
 
     # ================= 锁定 / 闲置 =================
     def _touch(self):
@@ -655,7 +682,7 @@ class MainWindow(QMainWindow):
             return
         m = self.db.settings.get("auto_lock_min", 5)
         if m > 0 and time.time() - self._last_activity > m * 60:
-            self.lock("已闲置自动锁定（可在设置中调整）")
+            self.lock(tr("已闲置自动锁定（可在设置中调整）"))
 
     def lock(self, msg: str = ""):
         # 有未保存修改时先自动保存（防丢失优先）
@@ -695,14 +722,14 @@ class MainWindow(QMainWindow):
         if img.isNull():
             return False
         self.editor.add_image_qimage(img)
-        toast(self, "已捕获粘贴的图片")
+        toast(self, tr("已捕获粘贴的图片"))
         return True
 
     # ================= 关闭 =================
     def closeEvent(self, ev):
         if self.editor.is_dirty():
             r = QMessageBox.question(
-                self, "未保存的修改", "当前条目有未保存的修改，退出前保存吗？",
+                self, tr("未保存的修改"), tr("当前条目有未保存的修改，退出前保存吗？"),
                 QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel, QMessageBox.Yes)
             if r == QMessageBox.Cancel:
                 ev.ignore()

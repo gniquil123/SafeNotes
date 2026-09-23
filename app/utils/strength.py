@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import math
 
+from app.i18n import tr
+
 COMMON_PW = frozenset("""123456 password 123456789 12345678 1234567 1234567890
 qwerty 123123 111111 1234567 abc123 123qwe qwerty123 1qaz2wsx password1
 iloveyou admin admin123 root welcome monkey dragon letmein login princess
@@ -20,10 +22,14 @@ KB_SEQ = ["qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890", "abcdefghijklmnopq
 LABELS = ["—", "弱", "一般", "强", "极强"]
 
 
+def _label(i):
+    return tr(LABELS[i])
+
+
 def evaluate(password: str) -> dict:
     """返回 {score:0-4, label, bits, note}。"""
     if not password:
-        return {"score": 0, "label": LABELS[0], "bits": 0, "note": ""}
+        return {"score": 0, "label": _label(0), "bits": 0, "note": ""}
 
     charset = 0
     if any(c.islower() for c in password):
@@ -61,4 +67,5 @@ def evaluate(password: str) -> dict:
 
     bits = round(bits)
     score = 1 if bits < 40 else 2 if bits < 60 else 3 if bits < 80 else 4
-    return {"score": score, "label": LABELS[score], "bits": bits, "note": "、".join(notes)}
+    return {"score": score, "label": _label(score), "bits": bits,
+            "note": "、".join(tr(n) for n in notes)}
